@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// Each list lives at buckets/{code}/titles/{titleId}.
+// The code is the random part after # in someone's private link.
+// Anyone who knows a code can read and edit that one list; nobody can
+// browse the list of all buckets, because nothing allows reading /buckets itself.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function validCode(code) {
+      return code.matches('^[A-Za-z0-9]{16,40}$');
+    }
+
+    function validTitle(d) {
+      return d.keys().hasOnly(['name', 'kind', 'platform', 'duration', 'genres', 'status',
+                               'rewatch', 'addedAt', 'watchedAt', 'timesWatched'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.kind in ['movie', 'series']
+        && d.platform is string && d.platform.size() <= 40
+        && d.duration in ['', 'short', 'medium', 'long']
+        && d.genres is list && d.genres.size() <= 8
+        && d.status in ['bucket', 'watched']
+        && d.rewatch is bool
+        && d.addedAt is string && d.addedAt.size() <= 40
+        && d.watchedAt is string && d.watchedAt.size() <= 40
+        && d.timesWatched is int && d.timesWatched >= 0;
+    }
+
+    match /buckets/{code}/titles/{titleId} {
+      allow read, delete: if validCode(code);
+      allow create, update: if validCode(code)
+                            && titleId.size() <= 40
+                            && validTitle(request.resource.data);
+    }
+  }
+}

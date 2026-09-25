@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Poplist: a movie and web-series watchlist in a 3D popcorn bucket. Pop it in. Pick it out.">
+<meta property="og:title" content="Poplist">
+<meta property="og:description" content="A movie and web-series watchlist in a 3D popcorn bucket. Pop it in. Pick it out.">
+<meta name="theme-color" content="#0b0907">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<title>Poplist</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap">
+<style>
+  /* One dark theatre; every surface is smoked liquid glass over the scene. */
+  :root{
+    --bg:#0b0907;
+    --ink:#f5f0ea;
+    --ink-2:rgba(245,240,234,0.66);
+    --ink-3:rgba(245,240,234,0.42);
+    --line:rgba(255,255,255,0.09);
+    --pill:rgba(255,255,255,0.07);
+    --pill-hover:rgba(255,255,255,0.13);
+    --solid:#f5f0ea;
+    --solid-ink:#1a1411;
+    --warm:#f3a64a;
+    --rose:#e0634f;
+    --radius:28px;
+    --font:'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color-scheme: dark;
+  }
+  html, body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font);
+    font-size:14px;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  button, input, select{ font-family:inherit; }
+  #app{ position:relative; height:100%; overflow:hidden; }
+  #stage{ position:absolute; inset:0; }
+  #stage canvas{ display:block; touch-action:none; -webkit-user-select:none; user-select:none; }
+  .vignette{
+    position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 55%, transparent 35%, rgba(0,0,0,0.6) 100%);
+  }
+
+  /* ---------- glass material ---------- */
+  .glass{
+    border-radius:var(--radius);
+    background:linear-gradient(180deg, rgba(26,21,18,0.34), rgba(18,14,12,0.52));
+    box-shadow:
+      0 24px 60px rgba(0,0,0,0.45),
+      inset 0 1px 1px rgba(255,255,255,0.22),
+      inset 0 -8px 20px rgba(255,255,255,0.03),
+      inset 0 0 0 1px rgba(255,255,255,0.09);
+  }
+  .glass.lg-fallback{ background:linear-gradient(180deg, rgba(26,21,18,0.55), rgba(18,14,12,0.7)); }
+
+  /* the warm orb: brand mark + little accents */
+  .orb{
+    width:30px; height:30px; border-radius:50%; flex:none;
+    background:radial-gradient(circle at 34% 30%, #ffe3a8 0%, #f7b453 30%, #e8703f 62%, #a8322a 100%);
+    box-shadow:0 6px 18px rgba(232,112,63,0.45), inset -3px -4px 8px rgba(80,10,5,0.35);
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    position:absolute; left:0; right:0; top:0;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:18px 22px 0;
+    z-index:5;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; min-width:0; }
+  .brand-text{ display:flex; flex-direction:column; min-width:0; }
+  .logo{ font-weight:600; font-size:19px; letter-spacing:-0.01em; line-height:1.15; }
+  .tally{ font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  .pill-btn{
+    height:40px; padding:0 18px;
+    border:none; border-radius:999px; cursor:pointer;
+    color:var(--ink); font-size:13.5px; font-weight:500;
+  }
+  .pill-btn:hover{ filter:brightness(1.15); }
+  .top-actions{ display:flex; align-items:center; gap:8px; }
+  .icon-btn{ width:40px; height:40px; padding:0; border:none; border-radius:50%; cursor:pointer; color:var(--ink); display:flex; align-items:center; justify-content:center; }
+  .icon-btn:hover{ filter:brightness(1.15); }
+  .icon-btn:focus-visible{ outline:2px solid var(--warm); outline-offset:2px; }
+  .icon-btn svg{ width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .icon-btn .spk{ fill:currentColor; stroke:none; }
+  .icon-btn .mute{ display:none; }
+  .icon-btn[aria-pressed="false"] .wave{ display:none; }
+  .icon-btn[aria-pressed="false"] .mute{ display:inline; }
+  .icon-btn[aria-pressed="false"]{ color:var(--ink-3); }
+
+  /* ---------- layout slots the 3D scene follows ---------- */
+  .layout{
+    position:absolute;
+    left:0; right:0;
+    top:76px;
+    bottom:128px;
+    padding-inline:22px;
+    display:grid;
+    grid-template-columns:1fr;
+    grid-template-rows:1fr;
+    gap:28px;
+    z-index:3;
+    pointer-events:none;
+  }
+  .layout[data-mode="compose"], .layout[data-mode="result"]{
+    bottom:22px;
+    grid-template-columns:minmax(300px, 380px) 1fr;
+  }
+  .bucket-slot{ min-height:0; min-width:0; }
+  .panel{
+    display:none;
+    flex-direction:column;
+    min-height:0;
+    max-height:100%;
+    align-self:center;
+    pointer-events:auto;
+  }
+  .layout[data-mode="compose"] .panel, .layout[data-mode="result"] .panel{ display:flex; }
+  .kernel-slot{ flex:0 0 118px; }
+
+  .card{ position:relative; display:flex; flex-direction:column; min-height:0; }
+  .card.shake{ animation:shake 0.35s ease; }
+  @keyframes shake{
+    20%{ transform:translateX(-6px); } 40%{ transform:translateX(6px); }
+    60%{ transform:translateX(-4px); } 80%{ transform:translateX(3px); }
+  }
+  .card.sending .card-body{ opacity:0.35; pointer-events:none; transition:opacity 0.2s; }
+  .view{ display:flex; flex-direction:column; min-height:0; flex:1; }
+  .card-body{ padding:22px 22px 20px; overflow:auto; min-height:0; }
+  .card-title{ margin:0 0 4px; font-size:21px; font-weight:600; letter-spacing:-0.01em; }
+  .card-sub{ margin:0 0 6px; color:var(--ink-2); font-size:13px; }
+  .close-x{
+    position:absolute; top:14px; right:14px;
+    width:32px; height:32px; border-radius:50%;
+    border:none; background:var(--pill); cursor:pointer;
+    color:var(--ink-2); font-size:17px; line-height:1;
+  }
+  .close-x:hover{ background:var(--pill-hover); color:var(--ink); }
+
+  @media (max-width:760px){
+    .topbar{ padding:14px 16px 0; }
+    .layout{ padding-inline:14px; top:64px; }
+    .layout[data-mode="compose"], .layout[data-mode="result"]{
+      grid-template-columns:1fr;
+      grid-template-rows:24% 1fr;
+      gap:4px;
+      bottom:12px;
+    }
+    .panel{ order:2; align-self:stretch; }
+    .bucket-slot{ order:1; }
+    .kernel-slot{ flex-basis:84px; }
+    .card-body{ padding:18px 18px 16px; }
+    :root{ --radius:24px; }
+  }
+
+  /* ---------- form ---------- */
+  .field{ display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+  .label{ font-size:12px; font-weight:500; color:var(--ink-3); }
+  .label .req{ color:var(--warm); margin-left:2px; }
+  .label-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .input, .select{
+    width:100%; box-sizing:border-box;
+    height:44px;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:14px;
+    padding:0 14px;
+    color:var(--ink);
+    font-size:14.5px;
+  }
+  .input::placeholder{ color:var(--ink-3); }
+  .input:focus, .select:focus{ outline:none; border-color:rgba(243,166,74,0.7); background:rgba(255,255,255,0.09); }
+  .select{
+    -webkit-appearance:none; appearance:none; cursor:pointer;
+    background:rgba(255,255,255,0.06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23f5f0ea' stroke-opacity='.6' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center;
+    padding-right:34px;
+  }
+  .select option{ background:#1c1612; color:var(--ink); }
+
+  /* segmented pill: movie / series, short / medium / long */
+  .seg{
+    display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:4px;
+    padding:4px;
+    background:rgba(255,255,255,0.06);
+    border-radius:999px;
+  }
+  .seg > button{
+    height:36px;
+    border:none; border-radius:999px;
+    background:transparent;
+    color:var(--ink-2);
+    font-size:13.5px; font-weight:500;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  .seg > button:hover{ color:var(--ink); }
+  .seg > button[aria-checked="true"], .seg > button[aria-pressed="true"]{ background:var(--solid); color:var(--solid-ink); }
+  .hint{ color:var(--ink-3); font-size:12px; margin:0; min-height:1.2em; }
+
+  /* chips */
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{
+    height:32px; padding:0 13px;
+    border:none; border-radius:999px;
+    background:var(--pill);
+    color:var(--ink-2);
+    font-size:12.5px; font-weight:500;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  .chip:hover{ background:var(--pill-hover); color:var(--ink); }
+  .chip[aria-pressed="true"]{ background:var(--solid); color:var(--solid-ink); }
+  .chip-sep{ width:1px; align-self:stretch; margin:4px 3px; background:var(--line); }
+
+  .seg > button:focus-visible, .chip:focus-visible, .btn:focus-visible, .pill-btn:focus-visible,
+  .mini:focus-visible, .link:focus-visible, .close-x:focus-visible, .row-actions button:focus-visible, .tab:focus-visible{
+    outline:2px solid var(--warm); outline-offset:2px;
+  }
+  .filled{ animation:filled 1.2s ease; }
+  @keyframes filled{ 0%{ box-shadow:0 0 0 3px rgba(243,166,74,0.5); } 100%{ box-shadow:0 0 0 0 rgba(243,166,74,0); } }
+  .mini{
+    height:26px; padding:0 11px;
+    border:none; border-radius:999px;
+    background:var(--pill); color:var(--ink);
+    font-size:12px; font-weight:500; cursor:pointer;
+  }
+  .mini:hover{ background:var(--pill-hover); }
+  .mini:disabled{ opacity:0.55; cursor:progress; }
+  .note{ margin:0; font-size:12px; color:var(--ink-2); }
+  .form-error{ min-height:1em; margin:12px 0 0; color:#ff9b86; font-size:12.5px; }
+
+  /* ---------- buttons ---------- */
+  .actions{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:18px; }
+  .btn{
+    height:46px; padding:0 22px;
+    border:none; border-radius:999px; cursor:pointer;
+    font-size:14px; font-weight:500;
+    transition:background 0.15s ease, transform 0.12s ease;
+  }
+  .btn:active{ transform:scale(0.98); }
+  .btn.primary{ background:var(--solid); color:var(--solid-ink); }
+  .btn.primary:hover{ background:#ffffff; }
+  .btn.ghost{ background:var(--pill); color:var(--ink); }
+  .btn.ghost:hover{ background:var(--pill-hover); }
+  .btn.grow{ flex:1; }
+  .btn:disabled{ opacity:0.4; cursor:not-allowed; }
+  .link{
+    background:none; border:none; cursor:pointer;
+    color:var(--ink-2); font-size:13px;
+    padding:6px 0;
+  }
+  .link:hover{ color:var(--ink); }
+  .link .arrow{ display:inline-block; transition:transform 0.2s ease; margin-left:4px; }
+  .link[aria-expanded="true"] .arrow{ transform:rotate(180deg); }
+
+  /* ---------- result ---------- */
+  .eyebrow{ display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:12px; color:var(--ink-3); }
+  .eyebrow .dot{ width:8px; height:8px; border-radius:50%; background:var(--warm); box-shadow:0 0 10px var(--warm); }
+  .pick-name{
+    font-size:clamp(26px, 3.6vw, 32px);
+    font-weight:600;
+    line-height:1.12;
+    letter-spacing:-0.02em;
+    margin:0 0 6px;
+    padding-right:36px;
+    text-wrap:balance;
+    overflow-wrap:anywhere;
+  }
+  .pick-name.cycling{ opacity:0.45; }
+  .pick-name.reveal{ animation:reveal 0.4s cubic-bezier(.2,.9,.3,1.3); }
+  @keyframes reveal{ from{ transform:translateY(6px); opacity:0; } to{ transform:none; opacity:1; } }
+  .pick-meta{ margin:0; color:var(--ink-2); font-size:13.5px; }
+  .tags{ display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; min-height:2px; }
+  .tag{ font-size:12px; padding:5px 11px; border-radius:999px; background:var(--pill); color:var(--ink-2); }
+  .tag.rewatch{ background:rgba(224,99,79,0.18); color:#ffb4a4; }
+  .mood{ margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+  .quick{ margin-top:10px; display:flex; flex-direction:column; gap:10px; }
+  .match{ margin:0; font-size:12.5px; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  .match strong{ color:var(--warm); font-weight:600; }
+  .match .link{ font-size:12.5px; margin-left:8px; padding:0; text-decoration:underline; text-underline-offset:3px; }
+
+  /* ---------- dock ---------- */
+  .dock{
+    position:absolute; left:0; right:0;
+    bottom:calc(26px + env(safe-area-inset-bottom, 0px));
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+    z-index:4;
+    padding-inline:16px;
+  }
+  .dock-bar{ display:flex; gap:6px; padding:6px; border-radius:999px; }
+  .dock .btn{ min-width:140px; }
+  .dock-hint{ margin:0; color:var(--ink-3); font-size:12.5px; text-align:center; }
+
+  /* ---------- list drawer ---------- */
+  .backdrop{ position:absolute; inset:0; background:rgba(0,0,0,0.35); z-index:8; }
+  .drawer{
+    position:absolute; top:12px; right:12px; bottom:12px;
+    width:min(400px, calc(100% - 24px));
+    box-sizing:border-box;
+    z-index:9;
+    display:flex; flex-direction:column;
+    padding:20px 20px 16px;
+    background:linear-gradient(180deg, rgba(26,21,18,0.62), rgba(18,14,12,0.78));
+    -webkit-backdrop-filter:blur(22px) saturate(1.4);
+    backdrop-filter:blur(22px) saturate(1.4);
+  }
+  .drawer-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .drawer-head h2{ font-size:20px; font-weight:600; margin:0; letter-spacing:-0.01em; }
+  .drawer .close-x{ position:static; }
+  .tabs{ display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; margin:16px 0 12px; background:rgba(255,255,255,0.06); border-radius:999px; }
+  .tab{
+    height:34px; border:none; border-radius:999px; cursor:pointer;
+    background:transparent; color:var(--ink-2);
+    font-size:13px; font-weight:500;
+    font-variant-numeric:tabular-nums;
+  }
+  .tab[aria-selected="true"]{ background:var(--solid); color:var(--solid-ink); }
+  .rows{ list-style:none; margin:0; padding:0; overflow:auto; flex:1; display:flex; flex-direction:column; gap:8px; }
+  .row{ padding:14px 16px; border-radius:18px; background:rgba(255,255,255,0.05); }
+  .row-top{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .row-name{ font-size:15.5px; font-weight:600; overflow-wrap:anywhere; }
+  .pill{ font-size:11.5px; color:var(--ink-3); }
+  .pill.rewatch{ color:#ffb4a4; }
+  .row-meta{ margin:3px 0 10px; color:var(--ink-2); font-size:12.5px; line-height:1.5; }
+  .row-actions{ display:flex; gap:6px; flex-wrap:wrap; }
+  .row-actions button{
+    height:30px; padding:0 13px;
+    border:none; border-radius:999px; cursor:pointer;
+    background:var(--pill); color:var(--ink);
+    font-size:12.5px; font-weight:500;
+  }
+  .row-actions button:hover{ background:var(--pill-hover); }
+  .row-actions button.primary{ background:var(--solid); color:var(--solid-ink); }
+  .row-actions button.danger{ background:rgba(224,99,79,0.22); color:#ffb4a4; }
+  .rows-empty{ color:var(--ink-2); font-size:13px; line-height:1.6; padding:18px 4px; }
+  .drawer-foot{ margin:12px 2px 0; color:var(--ink-3); font-size:12px; }
+
+  /* ---------- toast + loading ---------- */
+  .toast{
+    position:absolute; left:50%; transform:translateX(-50%);
+    top:calc(76px + env(safe-area-inset-top, 0px));
+    padding:11px 18px;
+    border-radius:999px;
+    font-size:13px; font-weight:500;
+    z-index:12;
+    max-width:calc(100% - 40px);
+    box-sizing:border-box;
+    text-align:center;
+  }
+  .loading{
+    position:absolute; inset:0; z-index:20;
+    display:flex; align-items:center; justify-content:center; gap:12px;
+    background:var(--bg);
+    color:var(--ink-2); font-size:13px;
+  }
+  /* ---------- credits: social icons that obey gravity ---------- */
+  .credits{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-top:10px; }
+  .credits-text{ font-size:11.5px; color:var(--ink-3); padding-bottom:6px; }
+  .toybox{ position:relative; width:176px; height:86px; flex:none; }
+  .toy{
+    position:absolute; left:0; top:0;
+    width:38px; height:38px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,0.09);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,0.22), inset 0 0 0 1px rgba(255,255,255,0.08), 0 6px 14px rgba(0,0,0,0.35);
+    color:var(--ink);
+    cursor:grab;
+    touch-action:none;
+    -webkit-user-select:none; user-select:none; -webkit-user-drag:none;
+    will-change:transform;
+  }
+  .toy:hover{ background:rgba(255,255,255,0.16); }
+  .toy.dragging{ cursor:grabbing; }
+  .toy svg{ width:16px; height:16px; fill:currentColor; pointer-events:none; }
+  .toy:focus-visible{ outline:2px solid var(--warm); outline-offset:2px; }
+  [hidden]{ display:none !important; }
+  @media (prefers-reduced-motion: reduce){
+    .card.shake, .pick-name.reveal, .filled{ animation:none; }
+  }
+
+  /* ---------- private link ---------- */
+  .share{ margin-top:12px; padding:14px; border-radius:18px; background:rgba(255,255,255,0.05); }
+  .share-title{ margin:0; font-size:13.5px; font-weight:600; }
+  .share-note{ margin:3px 0 10px; font-size:12px; color:var(--ink-2); line-height:1.5; }
+  .share-row{ display:flex; gap:6px; }
+  .share-row .input{ height:40px; font-size:12.5px; color:var(--ink-2); min-width:0; }
+  .share-row .btn{ height:40px; padding:0 16px; }
+  .qr{ margin-top:10px; display:flex; justify-content:center; }
+  .share .link{ display:block; text-align:left; }
+  #newListBtn{ margin-top:2px; color:var(--ink-3); }
+  .qr img, .qr svg{ width:168px; height:168px; border-radius:14px; background:#f5f0ea; padding:10px; box-sizing:content-box; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage"></div>
+  <div class="vignette"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="orb" aria-hidden="true"></span>
+      <div class="brand-text">
+        <span class="logo">Poplist</span>
+        <span class="tally" id="tally">Counting kernels...</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn glass" id="soundBtn" type="button" aria-pressed="true" aria-label="Sound on" title="Sound on">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="spk" d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+      </button>
+      <button class="pill-btn glass" id="listBtn" type="button">Your list</button>
+    </div>
+  </header>
+
+  <main class="layout" id="layout" data-mode="idle">
+    <section class="panel" id="panel" aria-live="polite">
+      <div class="kernel-slot" id="kernelSlot" aria-hidden="true"></div>
+      <div class="card glass" id="card">
+
+        <div class="view" id="composeView" hidden>
+          <button class="close-x" type="button" data-close aria-label="Cancel">&times;</button>
+          <div class="card-body">
+            <h2 class="card-title">New title</h2>
+            <p class="card-sub">Fill it in, then pop it in.</p>
+            <form id="composeForm" novalidate>
+              <div class="field">
+                <span class="label" id="kindLabel">Type<span class="req">*</span></span>
+                <div class="seg" role="radiogroup" aria-labelledby="kindLabel" id="kindSeg">
+                  <button type="button" role="radio" aria-checked="false" data-kind="movie" id="kindMovie">Movie</button>
+                  <button type="button" role="radio" aria-checked="false" data-kind="series" id="kindSeries">Web series</button>
+                </div>
+              </div>
+              <div class="field">
+                <div class="label-row">
+                  <label class="label" for="nameInput">Name<span class="req">*</span></label>
+                  <button type="button" class="mini" id="autofillBtn" hidden>Auto-fill</button>
+                </div>
+                <input type="text" class="input" id="nameInput" autocomplete="off" maxlength="120" placeholder="e.g. Andhadhun">
+                <p class="note" id="autofillNote" hidden></p>
+              </div>
+              <div class="field">
+                <label class="label" for="platformSelect">Platform</label>
+                <select class="select" id="platformSelect"></select>
+                <input type="text" class="input" id="platformOther" maxlength="40" autocomplete="off" placeholder="Where does it stream?" hidden>
+              </div>
+              <div class="field">
+                <span class="label" id="durLabel">Duration</span>
+                <div class="seg" id="durationChips" aria-labelledby="durLabel"></div>
+                <p class="hint" id="durationHint"></p>
+              </div>
+              <div class="field">
+                <span class="label">Genre</span>
+                <div class="chips" id="genreChips"></div>
+              </div>
+              <p class="form-error" id="formError" role="alert"></p>
+              <div class="actions">
+                <button type="submit" class="btn primary grow" id="saveBtn">Pop it in</button>
+                <button type="button" class="btn ghost" data-close>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="view" id="resultView" hidden>
+          <button class="close-x" type="button" id="resultClose" aria-label="Put it back and close">&times;</button>
+          <div class="card-body">
+            <p class="eyebrow"><span class="dot" aria-hidden="true"></span><span id="resultEyebrow">Tonight</span></p>
+            <h2 class="pick-name" id="pickName"></h2>
+            <p class="pick-meta" id="pickMeta"></p>
+            <div class="tags" id="pickTags"></div>
+            <div class="actions">
+              <button type="button" class="btn primary grow" id="eatBtn">Watched it</button>
+              <button type="button" class="btn ghost" id="againBtn">Shake again</button>
+            </div>
+            <div class="mood">
+              <button type="button" class="link" id="moodBtn" aria-expanded="false" aria-controls="quickBox">Not in the mood for this?<span class="arrow" aria-hidden="true">&#8964;</span></button>
+              <div class="quick" id="quickBox" hidden>
+                <div class="chips" id="quickFilters"></div>
+                <p class="match" id="matchCount"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+    <div class="bucket-slot" id="bucketSlot"></div>
+  </main>
+
+  <div class="dock" id="dock">
+    <p class="dock-hint" id="dockHint" hidden></p>
+    <div class="dock-bar glass" id="dockBar">
+      <button type="button" class="btn ghost" id="addBtn">Add a title</button>
+      <button type="button" class="btn primary" id="pickBtn">Pick for me</button>
+    </div>
+  </div>
+
+  <div class="backdrop" id="backdrop" hidden></div>
+  <aside class="drawer glass" id="drawer" hidden aria-label="Your list">
+    <div class="drawer-head">
+      <h2>Your list</h2>
+      <button class="close-x" type="button" id="drawerClose" aria-label="Close list">&times;</button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" id="tabBucket" type="button">In the bucket</button>
+      <button class="tab" role="tab" aria-selected="false" id="tabWatched" type="button">Watched</button>
+    </div>
+    <ul class="rows" id="rows"></ul>
+    <div class="share" id="shareBox" hidden>
+      <p class="share-title">Your private link</p>
+      <p class="share-note">Open it on your phone or laptop to see this same list. Anyone with the link can see and edit it, so share it only with people you'd hand the remote to.</p>
+      <div class="share-row">
+        <input class="input" id="shareLink" type="text" readonly aria-label="Your private link">
+        <button class="btn primary" id="copyLink" type="button">Copy</button>
+      </div>
+      <button class="link" id="qrToggle" type="button">Show QR code for your phone</button>
+      <div class="qr" id="qrBox" hidden></div>
+      <button class="link" id="newListBtn" type="button">Start a new list</button>
+    </div>
+    <p class="drawer-foot" id="drawerFoot"></p>
+    <div class="credits">
+      <span class="credits-text">Made by Apoorva</span>
+      <div class="toybox" id="toybox" role="group" aria-label="Find me elsewhere"></div>
+    </div>
+  </aside>
+
+  <div class="toast glass" id="toast" role="status" hidden></div>
+  <div class="loading" id="loading"><span class="orb" aria-hidden="true"></span>Warming up the popper...</div>
+</div>
+
+<script src="js/liquid-glass.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
