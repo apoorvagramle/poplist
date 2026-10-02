@@ -1,16 +1,10 @@
-// Paste your Firebase web app config here to sync lists across devices.
-// Firebase console -> Project settings -> Your apps -> Web app -> "SDK setup and configuration" -> Config.
-// These values are safe to publish: what people can do is decided by firestore.rules, not by hiding this.
-//
-// Leave it as null and the app still works, but each list is saved in that browser only.
-export const firebaseConfig = null;
-
-// Example (yours will have different values):
-// export const firebaseConfig = {
-//   apiKey: "AIza...",
-//   authDomain: "popcorn-bucket-1234.firebaseapp.com",
-//   projectId: "popcorn-bucket-1234",
-//   storageBucket: "popcorn-bucket-1234.appspot.com",
-//   messagingSenderId: "123456789012",
-//   appId: "1:123456789012:web:abc123def456"
-// };
+// Firebase web config for Poplist. These values are public by design;
+// access is controlled by firestore.rules.
+export const firebaseConfig = {
+  apiKey: "AIzaSyDW3CANZLYT05EzsDtL47s9cnGgCht8h2w",
+  authDomain: "apoorvagramle-poplist.firebaseapp.com",
+  projectId: "apoorvagramle-poplist",
+  storageBucket: "apoorvagramle-poplist.firebasestorage.app",
+  messagingSenderId: "728381933945",
+  appId: "1:728381933945:web:ebc3c2ba39f908ad1b07a8"
+};
